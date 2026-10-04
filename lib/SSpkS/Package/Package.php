@@ -448,8 +448,14 @@ class Package
     public static function compareDsmVersions(string $left, string $right): int
     {
         $normalize = static function (string $version): array {
-            $parts = preg_split('/[-._]/', $version);
-            return array_pad(array_map('intval', $parts), 3, 0);
+            if (!self::isValidDsmVersion($version)) {
+                throw new \InvalidArgumentException('Invalid DSM version: ' . $version);
+            }
+            [$release, $build] = explode('-', $version, 2);
+            $parts = explode('.', $release);
+            // Package Center supplies major/minor/build without the micro version.
+            // Within a major/minor release, the build identifies the DSM revision.
+            return [(int) $parts[0], (int) $parts[1], (int) $build];
         };
 
         return $normalize($left) <=> $normalize($right);
@@ -489,11 +495,16 @@ class Package
 
     private static function isValidDsmVersion(string $version): bool
     {
-        if (preg_match('/^(\d+)\.(\d+)-(\d+)$/D', $version, $matches) !== 1) {
+        if (preg_match('/^(\d+)\.(\d+)(?:\.(\d+))?-(\d+)$/D', $version, $matches) !== 1) {
             return false;
         }
 
-        return self::isUnsignedInt32($matches[1]) && self::isUnsignedInt32($matches[2]) && self::isUnsignedInt32($matches[3]);
+        foreach (array_slice($matches, 1) as $part) {
+            if ($part !== '' && !self::isUnsignedInt32($part)) {
+                return false;
+            }
+        }
+        return true;
     }
 
     private static function isUnsignedInt32(string $value): bool
